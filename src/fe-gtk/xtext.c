@@ -422,6 +422,17 @@ xtext_set_bg (GtkXText *xtext, GdkGC *gc, int index)
 {
 	gdk_gc_set_background (gc, &xtext->palette[index]);
 }
+static void
+xtext_set_fg_rgb (GtkXText *xtext, GdkGC *gc, int index)
+{
+	gdk_gc_set_rgb_fg_color(gc, &xtext->palette[index]);
+}
+
+static void
+xtext_set_bg_rgb (GtkXText *xtext, GdkGC *gc, int index)
+{
+	gdk_gc_set_rgb_bg_color(gc, &xtext->palette[index]);
+}
 
 static void
 gtk_xtext_init (GtkXText * xtext)
@@ -2723,6 +2734,7 @@ gtk_xtext_render_str (GtkXText * xtext, int y, textentry * ent,
 	int k;
 	int srch_underline = FALSE;
 	int srch_mark = FALSE;
+	int isHex = FALSE;
 
 	xtext->in_hilight = FALSE;
 
@@ -2772,7 +2784,7 @@ gtk_xtext_render_str (GtkXText * xtext, int y, textentry * ent,
 
 	if (xtext->jump_in_offset > 0 && offset < xtext->jump_in_offset)
 		xtext->dont_render2 = TRUE;
-
+	xtext->nc = 0;
 	while (i < len)
 	{
 
@@ -2788,28 +2800,43 @@ gtk_xtext_render_str (GtkXText * xtext, int y, textentry * ent,
 
 			xtext->in_hilight = TRUE;
 		}
-
-		if ((xtext->parsing_color && isdigit (str[i]) && xtext->nc < 2) ||
-			 (xtext->parsing_color && str[i] == ',' && isdigit (str[i+1]) && xtext->nc < 3 && !xtext->parsing_backcolor))
+		if ((xtext->parsing_color && (str[i] == '#') && (xtext->nc == 0)))
+			isHex = TRUE;
+		if ((xtext->parsing_color && (str[i] == ',') && isHex))
+			isHex = FALSE;
+		if ((xtext->parsing_color && (str[i] == ',') && (str[i+1] == '#')))
+		  isHex = TRUE;
+		if ((xtext->parsing_color && ((isdigit(str[i]) && !isHex) || (isxdigit(str[i]) && isHex) || (str[i] == '#' && isHex)) && ((xtext->nc < 7 && isHex) || (xtext->nc < 2 && !isHex))) ||
+			 (xtext->parsing_color && str[i] == ',' && ((isdigit(str[i+1]) && !isHex) || (str[i+1] == '#' && isHex)) && !xtext->parsing_backcolor && (xtext->nc < 8)))
 		{
 			pstr++;
 			if (str[i] == ',')
 			{
-				xtext->parsing_backcolor = TRUE;
 				if (xtext->nc)
 				{
 					xtext->num[xtext->nc] = 0;
 					xtext->nc = 0;
-					col_num = atoi (xtext->num);
-					if (col_num == 99)	/* mIRC lameness */
+					
+					if (*xtext->num == '#')
+						col_num = xtext->parsing_backcolor ? XTEXT_CUSTOM_BG : XTEXT_CUSTOM_FG;
+					else {
+						col_num = atoi(xtext->num);
+						if (col_num > XTEXT_MAX_COLOR)
+							col_num = col_num % XTEXT_MIRC_COLS;
+					}
+					
+					if (col_num == 99)		/* mIRC lameness */
 						col_num = XTEXT_FG;
-					else
-					if (col_num > XTEXT_MAX_COLOR)
-						col_num = col_num % XTEXT_MIRC_COLS;
+					
 					xtext->col_fore = col_num;
-					if (!mark)
-						xtext_set_fg (xtext, gc, col_num);
+					if (!mark && *xtext->num != '#')
+						xtext_set_fg(xtext, gc, col_num);
+					else if (*xtext->num == '#') {
+						gdk_color_parse(xtext->num, &xtext->palette[XTEXT_CUSTOM_FG]);
+						xtext_set_fg_rgb(xtext, gc, XTEXT_CUSTOM_FG);
+					}
 				}
+				xtext->parsing_backcolor = TRUE;
 			} else
 			{
 				xtext->num[xtext->nc] = str[i];
@@ -2820,35 +2847,46 @@ gtk_xtext_render_str (GtkXText * xtext, int y, textentry * ent,
 		{
 			if (xtext->parsing_color)
 			{
-				xtext->parsing_color = FALSE;
 				if (xtext->nc)
 				{
 					xtext->num[xtext->nc] = 0;
 					xtext->nc = 0;
-					col_num = atoi (xtext->num);
+					
+					if (*xtext->num == '#')
+						col_num = xtext->parsing_backcolor ? XTEXT_CUSTOM_BG : XTEXT_CUSTOM_FG;
+					else {
+						col_num = atoi(xtext->num);
+						if (col_num > XTEXT_MAX_COLOR)
+							col_num = col_num % XTEXT_MIRC_COLS;
+					}
+					
 					if (xtext->parsing_backcolor)
 					{
 						if (col_num == 99)	/* mIRC lameness */
 							col_num = XTEXT_BG;
-						else
-						if (col_num > XTEXT_MAX_COLOR)
-							col_num = col_num % XTEXT_MIRC_COLS;
+
 						if (col_num == XTEXT_BG)
 							xtext->backcolor = FALSE;
 						else
 							xtext->backcolor = TRUE;
-						if (!mark)
-							xtext_set_bg (xtext, gc, col_num);
+						if (!mark && *xtext->num != '#')
+							xtext_set_bg(xtext, gc, col_num);
+						else if (*xtext->num == '#') {
+							gdk_color_parse(xtext->num, &xtext->palette[col_num]);
+							xtext_set_bg_rgb(xtext, gc, col_num);
+						}
 						xtext->col_back = col_num;
 					} else
 					{
 						if (col_num == 99)	/* mIRC lameness */
 							col_num = XTEXT_FG;
-						else
-						if (col_num > XTEXT_MAX_COLOR)
-							col_num = col_num % XTEXT_MIRC_COLS;
-						if (!mark)
+
+						if (!mark && *xtext->num != '#')
 							xtext_set_fg (xtext, gc, col_num);
+						else if (*xtext->num == '#') {
+							gdk_color_parse(xtext->num, &xtext->palette[col_num]);
+							xtext_set_fg_rgb(xtext, gc, col_num);
+						}
 						xtext->col_fore = col_num;
 					}
 					xtext->parsing_backcolor = FALSE;
@@ -2860,6 +2898,7 @@ gtk_xtext_render_str (GtkXText * xtext, int y, textentry * ent,
 					j = 0;
 					gtk_xtext_reset (xtext, mark, FALSE);
 				}
+				xtext->parsing_color = FALSE;
 			}
 
 			if (!left_only && !mark &&
