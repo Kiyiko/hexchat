@@ -2399,7 +2399,7 @@ gtk_xtext_strip_color (unsigned char *text, int len, unsigned char *outbuf,
 	chunk_t c;
 	int i = 0;
 	int rcol = 0, bgcol = 0;
-	int hidden = FALSE;
+	int hidden = FALSE, isHex = FALSE;
 	unsigned char *new_str;
 	unsigned char *text0 = text;
 	int mbl;	/* multi-byte length */
@@ -2419,7 +2419,20 @@ gtk_xtext_strip_color (unsigned char *text, int len, unsigned char *outbuf,
 		if (mbl > len)
 			goto bad_utf8;
 
-		if (rcol > 0 && (isdigit (*text) || (*text == ',' && isdigit (text[1]) && !bgcol)))
+		if (rcol > 0 && *text == '#') {
+			isHex = TRUE;
+			rcol = 7;
+		} else if (rcol <= 0)
+			isHex = FALSE;
+		if (isHex && *text == ',') {
+			if (text[1] == '#')
+				isHex = TRUE;
+			else
+				isHex = FALSE;
+		}
+		if (rcol > 0 &&
+		  (((isdigit(*text) || (*text == ',' && isdigit(text[1]) && !bgcol)) && (!isHex)) ||
+		   (((isxdigit(*text) || *text == '#') || (*text == ',' && text[1] == '#' && !bgcol)) && (isHex))))
 		{
 			if (text[1] != ',') rcol--;
 			if (*text == ',')
@@ -2831,7 +2844,7 @@ gtk_xtext_render_str (GtkXText * xtext, int y, textentry * ent,
 					xtext->col_fore = col_num;
 					if (!mark && *xtext->num != '#')
 						xtext_set_fg(xtext, gc, col_num);
-					else if (*xtext->num == '#') {
+					else if (!mark && *xtext->num == '#') {
 						gdk_color_parse(xtext->num, &xtext->palette[XTEXT_CUSTOM_FG]);
 						xtext_set_fg_rgb(xtext, gc, XTEXT_CUSTOM_FG);
 					}
@@ -2871,7 +2884,7 @@ gtk_xtext_render_str (GtkXText * xtext, int y, textentry * ent,
 							xtext->backcolor = TRUE;
 						if (!mark && *xtext->num != '#')
 							xtext_set_bg(xtext, gc, col_num);
-						else if (*xtext->num == '#') {
+						else if (!mark && *xtext->num == '#') {
 							gdk_color_parse(xtext->num, &xtext->palette[col_num]);
 							xtext_set_bg_rgb(xtext, gc, col_num);
 						}
@@ -2883,7 +2896,7 @@ gtk_xtext_render_str (GtkXText * xtext, int y, textentry * ent,
 
 						if (!mark && *xtext->num != '#')
 							xtext_set_fg (xtext, gc, col_num);
-						else if (*xtext->num == '#') {
+						else if (!mark && *xtext->num == '#') {
 							gdk_color_parse(xtext->num, &xtext->palette[col_num]);
 							xtext_set_fg_rgb(xtext, gc, col_num);
 						}
@@ -3151,7 +3164,7 @@ find_next_wrap (GtkXText * xtext, textentry * ent, unsigned char *str,
 	unsigned char *orig_str = str;
 	int str_width = indent;
 	int rcol = 0, bgcol = 0;
-	int hidden = FALSE;
+	int hidden = FALSE, isHex = FALSE;
 	int mbl;
 	int char_width;
 	int ret;
@@ -3187,7 +3200,20 @@ find_next_wrap (GtkXText * xtext, textentry * ent, unsigned char *str,
 
 	while (1)
 	{
-		if (rcol > 0 && (isdigit (*str) || (*str == ',' && isdigit (str[1]) && !bgcol)))
+		if (rcol > 0 && *str == '#') {
+			isHex = TRUE;
+			rcol = 7;
+		} else if (rcol <= 0)
+			isHex = FALSE;
+		if (isHex && *str == ',') {
+			if (str[1] == '#')
+				isHex = TRUE;
+			else
+				isHex = FALSE;
+		}
+		if (rcol > 0 &&
+		  (((isdigit(*str) || (*str == ',' && isdigit(str[1]) && !bgcol)) && (!isHex)) ||
+		   (((isxdigit(*str) || *str == '#') || (*str == ',' && str[1] == '#' && !bgcol)) && (isHex))))
 		{
 			if (str[1] != ',') rcol--;
 			if (*str == ',')
