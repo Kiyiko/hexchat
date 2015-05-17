@@ -414,24 +414,19 @@ backend_draw_text_emph (GtkXText *xtext, int dofill, GdkGC *gc, int x, int y,
 static void
 xtext_set_fg (GtkXText *xtext, GdkGC *gc, int index)
 {
-	gdk_gc_set_foreground (gc, &xtext->palette[index]);
+  if (index == XTEXT_CUSTOM_FG)
+  	gdk_gc_set_rgb_fg_color(gc, &xtext->palette[index]);
+  else
+		gdk_gc_set_foreground (gc, &xtext->palette[index]);
 }
 
 static void
 xtext_set_bg (GtkXText *xtext, GdkGC *gc, int index)
 {
+  if (index == XTEXT_CUSTOM_BG)
+  	gdk_gc_set_rgb_bg_color(gc, &xtext->palette[index]);
+  else
 	gdk_gc_set_background (gc, &xtext->palette[index]);
-}
-static void
-xtext_set_fg_rgb (GtkXText *xtext, GdkGC *gc, int index)
-{
-	gdk_gc_set_rgb_fg_color(gc, &xtext->palette[index]);
-}
-
-static void
-xtext_set_bg_rgb (GtkXText *xtext, GdkGC *gc, int index)
-{
-	gdk_gc_set_rgb_bg_color(gc, &xtext->palette[index]);
 }
 
 static void
@@ -2846,7 +2841,7 @@ gtk_xtext_render_str (GtkXText * xtext, int y, textentry * ent,
 						xtext_set_fg(xtext, gc, col_num);
 					else if (!mark && *xtext->num == '#') {
 						gdk_color_parse(xtext->num, &xtext->palette[XTEXT_CUSTOM_FG]);
-						xtext_set_fg_rgb(xtext, gc, XTEXT_CUSTOM_FG);
+						xtext_set_fg(xtext, gc, XTEXT_CUSTOM_FG);
 					}
 				}
 				xtext->parsing_backcolor = TRUE;
@@ -2886,7 +2881,7 @@ gtk_xtext_render_str (GtkXText * xtext, int y, textentry * ent,
 							xtext_set_bg(xtext, gc, col_num);
 						else if (!mark && *xtext->num == '#') {
 							gdk_color_parse(xtext->num, &xtext->palette[col_num]);
-							xtext_set_bg_rgb(xtext, gc, col_num);
+							xtext_set_bg(xtext, gc, col_num);
 						}
 						xtext->col_back = col_num;
 					} else
@@ -2898,7 +2893,7 @@ gtk_xtext_render_str (GtkXText * xtext, int y, textentry * ent,
 							xtext_set_fg (xtext, gc, col_num);
 						else if (!mark && *xtext->num == '#') {
 							gdk_color_parse(xtext->num, &xtext->palette[col_num]);
-							xtext_set_fg_rgb(xtext, gc, col_num);
+							xtext_set_fg(xtext, gc, col_num);
 						}
 						xtext->col_fore = col_num;
 					}
@@ -2932,7 +2927,7 @@ gtk_xtext_render_str (GtkXText * xtext, int y, textentry * ent,
 					{
 						xtext_set_bg (xtext, gc, xtext->col_back);
 						xtext_set_fg (xtext, gc, xtext->col_fore);
-						xtext->backcolor = (xtext->col_back != XTEXT_BG)? TRUE: FALSE;
+						xtext->backcolor = (xtext->col_back != XTEXT_BG && xtext->col_back != XTEXT_CUSTOM_BG)? TRUE: FALSE;
 						srch_mark = FALSE;
 					}
 				}
@@ -2950,7 +2945,7 @@ gtk_xtext_render_str (GtkXText * xtext, int y, textentry * ent,
 					{
 						xtext_set_bg (xtext, gc, xtext->col_back);
 						xtext_set_fg (xtext, gc, xtext->col_fore);
-						xtext->backcolor = (xtext->col_back != XTEXT_BG)? TRUE: FALSE;
+						xtext->backcolor = (xtext->col_back != XTEXT_BG && xtext->col_back != XTEXT_CUSTOM_BG)? TRUE: FALSE;
 						srch_mark = FALSE;
 						xtext->underline = FALSE;
 					}
