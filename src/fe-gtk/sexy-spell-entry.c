@@ -998,7 +998,7 @@ check_color:
 					parsing_color = 3;
 			}
 			if ((colorOffset == 2 && !isHex) ||
-					(colorOffset == 8 && isHex))
+					(colorOffset == 7 && isHex))
 				parsing_color = 3;
 
 			switch (parsing_color)
