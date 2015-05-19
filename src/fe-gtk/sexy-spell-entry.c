@@ -373,37 +373,43 @@ insert_italic (SexySpellEntry *entry, guint start, gboolean toggle)
 }
 
 static void
-insert_color (SexySpellEntry *entry, guint start, int fgcolor, int bgcolor)
+insert_color_rgb (SexySpellEntry *entry, guint start, GdkColor *fg, GdkColor *bg)
 {
 	PangoAttribute *fgattr;
 	PangoAttribute *ulattr;
 	PangoAttribute *bgattr;
-
-	if (fgcolor < 0 || fgcolor > MAX_COL)
-	{
-		fgattr = pango_attr_foreground_new (colors[COL_FG].red, colors[COL_FG].green, colors[COL_FG].blue);
-		ulattr = pango_attr_underline_color_new (colors[COL_FG].red, colors[COL_FG].green, colors[COL_FG].blue);
-	}
-	else
-	{
-		fgattr = pango_attr_foreground_new (colors[fgcolor].red, colors[fgcolor].green, colors[fgcolor].blue);
-		ulattr = pango_attr_underline_color_new (colors[fgcolor].red, colors[fgcolor].green, colors[fgcolor].blue);
-	}
-
-	if (bgcolor < 0 || bgcolor > MAX_COL)
-		bgattr = pango_attr_background_new (colors[COL_BG].red, colors[COL_BG].green, colors[COL_BG].blue);
-	else
-		bgattr = pango_attr_background_new (colors[bgcolor].red, colors[bgcolor].green, colors[bgcolor].blue);
+	fgattr = pango_attr_foreground_new(fg->red, fg->green, fg->blue);
+	ulattr = pango_attr_underline_color_new(fg->red, fg->green, fg->blue);
+	bgattr = pango_attr_background_new(bg->red, bg->green, bg->blue);
 
 	fgattr->start_index = start;
 	fgattr->end_index = PANGO_ATTR_INDEX_TO_TEXT_END;
-	pango_attr_list_change (entry->priv->attr_list, fgattr);
+	pango_attr_list_change(entry->priv->attr_list, fgattr);
 	ulattr->start_index = start;
 	ulattr->end_index = PANGO_ATTR_INDEX_TO_TEXT_END;
 	pango_attr_list_change (entry->priv->attr_list, ulattr);
 	bgattr->start_index = start;
 	bgattr->end_index = PANGO_ATTR_INDEX_TO_TEXT_END;
 	pango_attr_list_change (entry->priv->attr_list, bgattr);
+}
+
+static void
+insert_color (SexySpellEntry *entry, guint start, int fgcolor, int bgcolor)
+{
+	GdkColor *fg;
+	GdkColor *bg;
+
+	if (fgcolor < 0 || fgcolor > MAX_COL)
+		fg = &colors[COL_FG];
+	else
+		fg = &colors[fgcolor];
+
+	if (bgcolor < 0 || bgcolor > MAX_COL)
+		bg = &colors[COL_BG];
+	else
+		bg = &colors[bgcolor];
+
+	insert_color_rgb(entry, start, fg, bg);
 }
 
 static void
@@ -902,9 +908,13 @@ check_attributes (SexySpellEntry *entry, const char *text, int len)
 	gboolean italic = FALSE;
 	gboolean underline = FALSE;
 	int parsing_color = 0;
-	char fg_color[3];
-	char bg_color[3];
-	int i, offset = 0;
+	char fg_color[8];
+	char bg_color[8];
+	GdkColor fgColor;
+	GdkColor bgColor;
+	GdkColor *ptr;
+	int i, offset = 0, colorOffset = 0;
+	int isHex = FALSE;
 
 	memset (bg_color, 0, sizeof(bg_color));
 	memset (fg_color, 0, sizeof(fg_color));
@@ -963,54 +973,92 @@ check_color:
 			if (!parsing_color)
 				continue;
 
-			if (!g_unichar_isdigit (text[i]))
+			if (text[i] == '#' && colorOffset == 0)
 			{
-				if (text[i] == ',' && parsing_color <= 3)
+				isHex = TRUE;
+				if (parsing_color == 1)
+					fg_color[colorOffset++] = text[i];
+				else
+					bg_color[colorOffset++] = text[i];
+				offset++;
+				continue;
+			}
+			if ((!g_unichar_isdigit (text[i]) && !isHex) ||
+					(!g_unichar_isxdigit(text[i]) && isHex))
+			{
+				if (text[i] == ',' && parsing_color == 1)
 				{
-					parsing_color = 3;
+					parsing_color = 2;
+					colorOffset = 0;
+					isHex = FALSE;
 					offset++;
 					continue;
 				}
 				else
-					parsing_color = 5;
+					parsing_color = 3;
 			}
-
-			/* don't parse background color without a comma */
-			else if (parsing_color == 3 && text[i - 1] != ',')
-				parsing_color = 5;
+			if ((colorOffset == 2 && !isHex) ||
+					(colorOffset == 8 && isHex))
+				parsing_color = 3;
 
 			switch (parsing_color)
 			{
 			case 1:
-				fg_color[0] = text[i];
-				parsing_color++;
+				fg_color[colorOffset++] = text[i];
 				offset++;
 				continue;
 			case 2:
-				fg_color[1] = text[i];
-				parsing_color++;
+				bg_color[colorOffset++] = text[i];
 				offset++;
 				continue;
 			case 3:
-				bg_color[0] = text[i];
-				parsing_color++;
-				offset++;
-				continue;
-			case 4:
-				bg_color[1] = text[i];
-				parsing_color++;
-				offset++;
-				continue;
-			case 5:
 				if (bg_color[0] != 0)
 				{
 					insert_hiddenchar (entry, i - offset, i);
-					insert_color (entry, i, atoi (fg_color), atoi (bg_color));
+					if (bg_color[0] == '#')
+					{
+						gdk_color_parse(bg_color, &bgColor);
+						if ((fg_color[0] != '#') && (fg_color[0] != 0))
+						{
+							colorOffset = atoi(fg_color);
+							if (colorOffset < 0 || colorOffset > MAX_COL)
+								ptr = &colors[COL_FG];
+							else
+								ptr = &colors[colorOffset];
+							insert_color_rgb(entry, i, ptr, &bgColor);
+						}
+						else
+						{
+							gdk_color_parse(fg_color, &fgColor);
+							insert_color_rgb(entry, i, &fgColor, &bgColor);
+						}
+					}
+					else
+					{
+						if (fg_color[0] == '#')
+						{
+							colorOffset = atoi(bg_color);
+							if (colorOffset < 0 || colorOffset > MAX_COL)
+								ptr = &colors[COL_BG];
+							else
+								ptr = &colors[colorOffset];
+							gdk_color_parse(fg_color, &fgColor);
+							insert_color_rgb(entry, i, &fgColor, ptr);
+						}
+						else
+							insert_color (entry, i, atoi (fg_color), atoi (bg_color));
+					}
 				}
 				else if (fg_color[0] != 0)
 				{
 					insert_hiddenchar (entry, i - offset, i);
-					insert_color (entry, i, atoi (fg_color), -1);
+					if (fg_color[0] == '#')
+					{
+						gdk_color_parse(fg_color, &fgColor);
+						insert_color_rgb(entry, i, &fgColor, &colors[COL_BG]);
+					}
+					else
+						insert_color (entry, i, atoi (fg_color), -1);
 				}
 				else
 				{
@@ -1022,6 +1070,7 @@ check_color:
 				memset (bg_color, 0, sizeof(bg_color));
 				memset (fg_color, 0, sizeof(fg_color));
 				parsing_color = 0;
+				colorOffset = 0;
 				offset = 0;
 				continue;
 			}
